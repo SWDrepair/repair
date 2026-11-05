@@ -650,7 +650,29 @@ function rotFor(id){
   let h=0; for(const c of id) h = (h*31 + c.charCodeAt(0)) % 1000;
   return ((h % 5) - 2) + 'deg';
 }
-function driveImgUrl(fileId){
+// รูปจาก Drive: ลิงก์แบบ uc?export=view มักถูก Google บล็อกเมื่อฝังในเว็บอื่น
+// จึงใช้ thumbnail เป็นหลัก แล้วสลับไปลิงก์สำรองอัตโนมัติถ้าโหลดไม่ขึ้น
+const IMG_FALLBACKS = [
+  id => `https://drive.google.com/thumbnail?id=${id}&sz=w1200`,
+  id => `https://lh3.googleusercontent.com/d/${id}=w1200`,
+  id => `https://drive.google.com/uc?export=view&id=${id}`
+];
+function driveImgUrl(fileId, attempt=0){
+  return IMG_FALLBACKS[Math.min(attempt, IMG_FALLBACKS.length-1)](fileId);
+}
+document.addEventListener('error', (e)=>{
+  const img = e.target;
+  if(!(img instanceof HTMLImageElement) || !img.dataset.fid) return;
+  const next = Number(img.dataset.attempt || 0) + 1;
+  if(next >= IMG_FALLBACKS.length){
+    img.removeAttribute('data-fid');
+    img.parentElement.textContent = 'โหลดรูปไม่สำเร็จ';
+    return;
+  }
+  img.dataset.attempt = next;
+  img.src = driveImgUrl(img.dataset.fid, next);
+}, true);
+function _unusedDriveImgUrl(fileId){
   return `https://drive.google.com/uc?export=view&id=${fileId}`;
 }
 function driveVideoEmbedUrl(fileId){
@@ -927,7 +949,7 @@ function ticketCard(t, {tech}={}){
     </div>
     <div class="meta">ผู้แจ้ง: ${esc(t.name)} · ${esc(t.category)} · ${fmtDate(t.createdAt)}</div>
     <div class="desc">${esc(t.description)}</div>
-    ${photos.length ? `<div class="ticket-photos">${photos.map(fid=>`<div class="photo-slot"><img src="${driveImgUrl(fid)}" loading="lazy"></div>`).join('')}</div>` : ''}
+    ${photos.length ? `<div class="ticket-photos">${photos.map(fid=>`<div class="photo-slot"><img src="${driveImgUrl(fid)}" data-fid="${esc(fid)}" data-attempt="0" referrerpolicy="no-referrer" loading="lazy"></div>`).join('')}</div>` : ''}
     ${t.videoFileId ? `<div class="video-slot"><iframe src="${driveVideoEmbedUrl(t.videoFileId)}" allow="autoplay" frameborder="0"></iframe></div>` : ''}
     ${t.note ? `<div class="note">📝 บันทึกจากช่าง: ${esc(t.note)}</div>` : ''}
   `;
